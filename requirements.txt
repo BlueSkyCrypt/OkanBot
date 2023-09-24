@@ -1,10 +1,8 @@
 google-cloud-language
-python-decouple
 functions-framework==3.*
 janome
 emoji
 atproto
-load_dotenv
 python_dateutil
 typing
 wordcloud

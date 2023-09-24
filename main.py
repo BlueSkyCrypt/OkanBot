@@ -1,4 +1,3 @@
-import decouple
 import functions_framework
 from janome.tokenizer import Tokenizer
 import json
@@ -13,18 +12,14 @@ import logging
 import google.cloud.logging
 from wordcloud import WordCloud
 from datetime import datetime, timedelta, timezone
-
 from atproto import Client
 from atproto.xrpc_client import models
 from dateutil.parser import parse
-from dotenv import load_dotenv
-
-load_dotenv(verbose=True)
-logging.basicConfig(level=logging.FATAL, format="%(asctime)s - %(levelname)s - %(message)s")
 
 client = google.cloud.logging.Client()
 client.setup_logging()
 
+logging.basicConfig(level=logging.FATAL, format="%(asctime)s - %(levelname)s - %(message)s")
 
 HANDLE = os.getenv("ATP_USERNAME")
 PASSWORD = os.getenv("ATP_PASSWORD")
@@ -32,11 +27,12 @@ OUTPATH = "/tmp/"
 if os.name == 'nt':
     OUTPATH="./out/"
 
+tkn = Tokenizer("./userdic.csv", udic_type="simpledic", udic_enc="utf8")
+
 class OkanBotMessage(t.TypedDict):
     content: t.Optional[str]
     did: t.Optional[str]
     name: t.Optional[str]
-
 
 def get_notifications(client: Client):
     response = client.app.bsky.notification.list_notifications()
@@ -50,22 +46,18 @@ def filter_mentions_and_replies_from_notifications(ns: t.List["models.AppBskyNot
     return [n for n in ns if n.reason in ("mention")]
 
 def filter_unread_notifications(ns: t.List["models.AppBskyNotificationListNotifications.Notification"], seen_at: datetime) -> t.List["models.AppBskyNotificationListNotifications.Notification"]:
-    # IndexされてからNotificationで取得できるまでにラグがあるので、最後に見た時刻より少し前ににIndexされたものから取得する
     return [n for n in ns if seen_at - timedelta(minutes=2) < parse(n.indexed_at)]
 
 
 def get_thread(client: Client, uri: str) -> "models.AppBskyFeedDefs.FeedViewPost":
     return client.app.bsky.feed.get_post_thread({"uri": uri})
 
-
-# TODO: receive models.AppBskyFeedDefs.ThreadViewPost
 def is_already_replied_to(feed_view: models.AppBskyFeedDefs.FeedViewPost, did: str) -> bool:
     replies = feed_view.thread.replies
     if replies is None:
         return False
     else:
         return any([reply.post.author.did == did for reply in replies])
-
 
 def flatten_posts(thread: "models.AppBskyFeedDefs.ThreadViewPost") -> t.List[t.Dict[str, any]]:
     posts = [thread.post]
@@ -76,11 +68,8 @@ def flatten_posts(thread: "models.AppBskyFeedDefs.ThreadViewPost") -> t.List[t.D
 
     return posts
 
-
 def get_openai_chat_message_name(name: str) -> str:
-    # should be '^[a-zA-Z0-9_-]{1,64}$'
     return name.replace(".", "_")
-
 
 def posts_to_sorted_messages(posts: t.List[models.AppBskyFeedDefs.PostView], assistant_did: str) -> t.List[OkanBotMessage]:
     sorted_posts = sorted(posts, key=lambda post: post.indexed_at)
@@ -88,7 +77,6 @@ def posts_to_sorted_messages(posts: t.List[models.AppBskyFeedDefs.PostView], ass
     for post in sorted_posts:
         messages.append(OkanBotMessage(content=post.record.text, did=post.author.did,name=get_openai_chat_message_name(post.author.handle)))
     return messages
-
 
 def thread_to_messages(thread: "models.AppBskyFeedGetPostThread.Response", did: str) -> t.List[OkanBotMessage]:
     if thread is None:
@@ -107,15 +95,11 @@ def reply_to(notification: models.AppBskyNotificationListNotifications.Notificat
     else:
         return {"root": notification.record.reply.root, "parent": parent}
 
-
-tkn = Tokenizer("./userdic.csv", udic_type="simpledic", udic_enc="utf8")
-
 def word_count(username,userhandle,client,mcmax,maxposts):
     prof = client.app.bsky.actor.get_profile({"actor":userhandle})
     posts_count = prof.posts_count
     print("Handle:"+userhandle)
     print("Posts :"+str(posts_count))
-#    t = Tokenizer(")
     cursor = ""
 
     if posts_count > maxposts:
@@ -147,25 +131,43 @@ def word_count(username,userhandle,client,mcmax,maxposts):
     c = collections.Counter(words)
     return (c.most_common(mcmax*4),c.most_common(mcmax))
 
-#ワードクラウド作成関数(日本語テキスト版)
-def create_wordcloud_ja(word_list,userhandle):
+def create_wordcloud_ja(word_list,userhandle,cmapin='tab20',bgcolor='white',fgcolor=""):
     fontpath = './NotoSansCJK-Regular.ttc'
     stop_words_ja = ['もの', 'こと', 'とき', 'そう', 'たち', 'これ', 'よう', 'これら', 'それ', 'すべて']
     word_chain = ""
     for tpltpl in word_list:
         word_chain = word_chain + tpltpl[0] + " "
-#900x500
-#    word_chain = ' '.join(wlist)
-    wordcloud = WordCloud(background_color="white",
-                          font_path=fontpath,
-                          width=3000,
-                          height=1000,
-                          mask = None,
-                          contour_width=1,
-                          contour_color="black",
-                          stopwords=set(stop_words_ja)).generate(word_chain)
-    wordcloud.to_file(f"{OUTPATH}{userhandle}.png")
 
+    word_color_func=None
+
+    if fgcolor != "":
+      word_color_func = lambda *args, **kwargs: fgcolor
+
+    wordcloud = None
+    if word_color_func != None:
+     wordcloud = WordCloud(background_color=bgcolor,
+                           color_func=word_color_func,
+                           font_path=fontpath,
+                           width=3000,
+                           height=1000,
+                           prefer_horizontal=0.8,
+                           mask = None,
+                           colormap = cmapin,
+                           contour_width=1,
+                           contour_color="black",
+                           stopwords=set(stop_words_ja)).generate(word_chain)
+    else:
+     wordcloud = WordCloud(background_color=bgcolor,
+                           font_path=fontpath,
+                           width=3000,
+                           height=1000,
+                           prefer_horizontal=0.8,
+                           mask = None,
+                           colormap = cmapin,
+                           contour_width=1,
+                           contour_color="black",
+                           stopwords=set(stop_words_ja)).generate(word_chain)
+    wordcloud.to_file(f"{OUTPATH}{userhandle}.png")
 
 WCOUNT=15
 WMAX=2000
@@ -192,8 +194,23 @@ def read_notifications_and_reply(client: Client, last_seen_at: datetime = None) 
             continue
 
         post_messages = thread_to_messages(thread, did)
+        colmap='tab20'
+        bgcolor=""
+        fgcolor=""
         for pm in post_messages:
             print(pm['name'])
+            if "白黒" in pm['content']:
+                bgcolor = "white"
+                fgcolor = "black"
+            else:
+                if "黒白" in pm['content']:
+                    bgcolor = "black"
+                    fgcolor = "white"
+                else:
+                    if "黒" in pm['content']:
+                        bgcolor = "black"
+                    else:
+                        bgcolor = "white"
             if "ランク" in pm['content']:
                 wctpl = word_count(pm['name'],pm['did'],client,WCOUNT,WMAX)
                 wc0 = wctpl[0]
@@ -205,7 +222,7 @@ def read_notifications_and_reply(client: Client, last_seen_at: datetime = None) 
                     rank+=1
                 print(postdata)
                 try:
-                  create_wordcloud_ja(wc0,pm['name'])
+                  create_wordcloud_ja(wc0,pm['name'],colmap,bgcolor,fgcolor)
                 except Exception as eex:
                   print(eex)
                 imagepath= f"{OUTPATH}"+pm['name']+".png"
