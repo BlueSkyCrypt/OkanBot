@@ -1,0 +1,14 @@
+google-cloud-language
+python-decouple
+functions-framework==3.*
+janome
+emoji
+atproto
+load_dotenv
+python_dateutil
+typing
+wordcloud
+datetime
+timedelta
+timezone-converter
+google-cloud-logging
