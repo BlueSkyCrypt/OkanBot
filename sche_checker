@@ -1,0 +1,177 @@
+from pprint import pprint
+import json
+from datetime import datetime, timedelta
+from datetime import datetime, timedelta
+from datetime import datetime, timedelta
+
+def get_nth_weekday_of_month(target_date, n, weekday):
+    # 月の最初の日を取得
+    first_day = target_date.replace(day=1)
+
+    # 月の最初の週を第1週として扱う
+    first_weekday = first_day.weekday()
+    if first_weekday <= weekday:
+        days_until_target_weekday = weekday - first_weekday + (7 * (n - 1))
+    else:
+        days_until_target_weekday = 7 - first_weekday + weekday + (7 * (n - 1))
+
+    # 指定した曜日まで日数を進める
+    target_weekday = first_day + timedelta(days=days_until_target_weekday)
+
+    # If the resulting date is not within the target month, assume it's in the next month.
+    if target_weekday.month != target_date.month:
+        target_weekday = target_weekday.replace(day=1)
+
+    # datetimeオブジェクトとして返す
+    return target_weekday
+
+def calculate_ones(item, current_time):
+    return datetime.strptime(item["date"], '%Y-%m-%d %H:%M:%S')
+
+def calculate_perday(item, reg_date):
+    alarm_time = datetime.strptime(item["date"].split(' ')[-1], '%H:%M:%S')
+    next_date = reg_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
+    if next_date <= reg_date:
+        next_date += timedelta(days=1)
+    return next_date
+
+def calculate_perweek(item, current_time):
+    days_ahead = item["windex"] - current_time.weekday()
+    if days_ahead <= 0: 
+        days_ahead += 7
+    next_date = current_time + timedelta(days_ahead)
+    alarm_time = datetime.strptime(item["date"].split(' ')[-1], '%H:%M:%S')
+    return next_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
+
+def calculate_permonth(item, current_time):
+    nsyuu = item["nsyuu"]
+    windex = item["windex"]
+    alarm_date = datetime.strptime(item["date"].split(' ')[0], '%Y-%m-%d')
+    if nsyuu != -1:
+        if windex == -1:
+            windex = 0
+        alarm_date=get_nth_weekday_of_month(current_time,nsyuu,windex)
+        return alarm_date
+    else:
+        next_date = current_time.replace(day=alarm_date.day)
+        if next_date < current_time:
+            if current_time.month == 12:
+                next_date = next_date.replace(month=1, year=current_time.year+1)
+            else:
+                next_date = next_date.replace(month=current_time.month+1)
+        alarm_time = datetime.strptime(item["date"].split(' ')[-1], '%H:%M:%S')
+        return next_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
+
+def calculate_peryear(item, current_time):
+    alarm_date = datetime.strptime(item["date"].split(' ')[0], '%Y-%m-%d')
+    next_date = current_time.replace(month=alarm_date.month, day=alarm_date.day)
+    if next_date < current_time:
+        next_date = next_date.replace(year=current_time.year+1)
+    alarm_time = datetime.strptime(item["date"].split(' ')[-1], '%H:%M:%S')
+    return next_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
+
+def calculate_nextday(item, current_time):
+    next_date = current_time + timedelta(days=1)
+    alarm_time = datetime.strptime(item["date"].split(' ')[-1], '%H:%M:%S')
+    return next_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
+
+def calculate_nextweek(item, current_time):
+    reg_date = datetime.strptime(item["regdate"], '%Y-%m-%d %H:%M:%S')
+    days_ahead = item["windex"] - reg_date.weekday()
+    if days_ahead <= 0: 
+        days_ahead += 7
+    next_date = reg_date + timedelta(days=days_ahead)
+    alarm_time = datetime.strptime(item["date"].split(' ')[-1], '%H:%M:%S')
+    return next_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
+
+def calculate_nextmonth(item, current_time):
+    reg_date = datetime.strptime(item["regdate"].split(' ')[0], '%Y-%m-%d')
+    nsyuu = item["nsyuu"]
+    windex = item["windex"]
+    alarm_date = datetime.strptime(item["date"].split(' ')[0], '%Y-%m-%d')
+    if nsyuu != -1:
+        if windex == -1:
+            windex = 0
+        alarm_date=get_nth_weekday_of_month(alarm_date,nsyuu,windex)
+        print(alarm_date)
+        return alarm_date
+    else:
+        reg_date = datetime.strptime(item["regdate"], '%Y-%m-%d %H:%M:%S')
+        if reg_date.month == 12:
+            next_date = reg_date.replace(month=1, year=reg_date.year+1)
+        else:
+            next_date = reg_date.replace(month=reg_date.month+1)
+        alarm_time = datetime.strptime(item["date"].split(' ')[-1], '%H:%M:%S')
+        return next_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
+
+def calculate_nextyear(item, current_time):
+    reg_date = datetime.strptime(item["regdate"], '%Y-%m-%d %H:%M:%S')
+    next_date = reg_date.replace(year=reg_date.year+1)
+    alarm_time = datetime.strptime(item["date"].split(' ')[-1], '%H:%M:%S')
+    return next_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
+
+def calculate_nextnextday(item, current_time):
+    next_date = current_time + timedelta(days=2)
+    alarm_time = datetime.strptime(item["date"].split(' ')[-1], '%H:%M:%S')
+    return next_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
+
+def get_next_alarm_time(item, current_time):
+    period = item["period"].lower()
+    switch = {
+        "ones": calculate_ones,
+        "perday": calculate_perday,
+        "perweek": calculate_perweek,
+        "permonth": calculate_permonth,
+        "peryear": calculate_peryear,
+        "nextday": calculate_nextday,
+        "nextweek": calculate_nextweek,
+        "nextyear": calculate_nextyear,
+        "nextmonth": calculate_nextmonth,
+        "nextnextday": calculate_nextnextday,
+    }
+    return switch.get(period, lambda item, current_time: None)(item, current_time)
+
+def get_schedule_status_from_json(json_str):
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError:
+        print("Error: Invalid JSON string.")
+        return None, None
+
+    current_time = datetime.now()
+    expired_alarms = []
+    upcoming_alarms = []
+
+    for item in data["schedule"]:
+        next_alarm_time = get_next_alarm_time(item, current_time)
+        if next_alarm_time is None:
+            continue
+        if next_alarm_time < current_time:
+            item['nextalm'] = str(next_alarm_time)
+            expired_alarms.append((item, next_alarm_time))
+        else:
+            item['nextalm'] = str(next_alarm_time)
+            upcoming_alarms.append((item, next_alarm_time))
+
+    return expired_alarms, upcoming_alarms
+
+def display_alarms(expired, upcoming):
+    print("=== Expired Alarms ===")
+    for item, alarm_time in expired:
+        print(f"Expired alarm for schedule '{item['message']}'")
+
+filename = "schedule.json"
+jsonstr = ""
+with open(filename,"r") as f:
+   jsonstr = f.read()
+
+#while True:
+   print(">")
+   expired,upcomming = get_schedule_status_from_json(jsonstr)
+   expired = sorted(expired,key=lambda x: x[0]['nextalm'])
+   upcomming = sorted(upcomming,key=lambda x: x[0]['nextalm'])
+
+   for itm in expired:
+       print("EXPIRED:"+itm[0]['inputstr'].replace("\n"," ") + "->" + itm[0]['nextalm'])
+   for itm in upcomming:
+       print("NEXT:"+itm[0]['inputstr'].replace("\n","_")+"===>"+itm[0]['message'].replace("\n","_")+ "->" + itm[0]['nextalm'])
