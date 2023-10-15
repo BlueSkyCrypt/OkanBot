@@ -1,9 +1,10 @@
+import traceback
 import functions_framework
 from janome.tokenizer import Tokenizer
 import pytz
 import sche_func
-import sche_db
-import pprint
+import sche_firestore
+import pyt
 import math
 import json
 import emoji
@@ -30,6 +31,8 @@ client = google.cloud.logging.Client()
 client.setup_logging()
 
 logging.basicConfig(level=logging.FATAL, format="%(asctime)s - %(levelname)s - %(message)s")
+
+dbhndr = sche_firestore.FirestoreJsonHandler('sche')
 
 HANDLE = os.getenv("ATP_USERNAME")
 PASSWORD = os.getenv("ATP_PASSWORD")
@@ -328,7 +331,7 @@ WMAX=2000
 def read_notifications_and_reply(client: Client, last_seen_at: datetime = None) -> datetime:
 #    print(f"last_seen_at: {last_seen_at}")
     did = client.me.did
-    seen_at = datetime.now(tz=timezone.utc)
+    seen_at = pyt.datetimenow()
 
     # unread countで判断するアプローチは、たまたまbsky.appで既読をつけてしまった場合に弱い
     ns = get_notifications(client)
@@ -365,9 +368,46 @@ def read_notifications_and_reply(client: Client, last_seen_at: datetime = None) 
                 bgcolor = "black"
             else:
                 bgcolor = "white"
+            if "削除" in pm['content']:
+                    meirei = pm['content'].replace("@okanbot.bsky.social","").replace("　"," ")
+                    ml = meirei.replace("\n"," ").replace("\r"," ").split(" ")
+                    postdata=""
+                    if len(ml) == 0:
+                        postdata="番号を指定してね"
+                    else:
+                        try:
+                            delnum =  int(ml[2].translate(str.maketrans({chr(0xFF01 + i): chr(0x21 + i) for i in range(94)})))
+                        except Exception as eee:
+                            delnum = 0
+                            postdata="何かが変:"+str(eee)+":"+str(ml)
+                        if delnum != 0:
+                         postdata=f'{delnum}番目のスケジュールを消すよ\n'
+                         udatadic = dbhndr.read_user_json(pm['did'])
+                         try:
+                             udatadic['sche'].pop(delnum-1)
+                         except:
+                             pass
+                         dbhndr.write_user_json(pm['did'],udatadic)
+                         kennsuu=len(udatadic['sche'])
+                         if kennsuu > 0:
+                             postdata += f'現在{kennsuu}件のスケジュールがあるよ\n'
+                             schenum=1
+                             for sc in udatadic['sche']:
+                                 postdata +=  f"{schenum}. "+sc['nextalm']+sc['message'].replace("@okanbot.bsky.social","").replace("登録","") + "\n"
+                                 schenum+=1
+                         else:
+                            postdata = f'登録されているスケジュールは無いよ\n'
+                    client.send_post(text=f"{postdata[:300]}", reply_to=reply_to(notification,None))
+            if "リスト" in pm['content']:
+                    udatadic = dbhndr.read_user_json(pm['did'])
+                    kennsuu=len(udatadic['sche'])
+                    postdata = f'{kennsuu}件のスケジュールがあるよ\n'
+                    schenum=1
+                    for sc in udatadic['sche']:
+                        postdata +=  f"{schenum}. "+sc['nextalm']+sc['message'].replace("@okanbot.bsky.social","").replace("登録","") + "\n"
+                    client.send_post(text=f"{postdata[:300]}", reply_to=reply_to(notification,None))
             if "登録" in pm['content']:
-                    pprint.pprint(pm)
-                    meirei = pm['content'].replace("@okanbot.bsky.social 登録","")
+                    meirei = pm['content'].replace("@okanbot.bsky.social 登録","").replace("\u3000"," ").replace('\u200b', '')
                     jsbase = {"username":pm['did']}
                     js = []
                     jsbase["schedule"]=js
@@ -380,7 +420,9 @@ def read_notifications_and_reply(client: Client, last_seen_at: datetime = None) 
                     for itm in upcomming:
                         postdata="わかった、おかんにまかせといて\n"
                         postdata += itm[0]['nextalm']+" 近辺でメンションするわ"
-                        sche_db.write_to_firestore(pm['did'],pm['name'],itm[0])
+                        udatadic = dbhndr.read_user_json(pm['did'])
+                        udatadic['sche'].append(itm[0])
+                        dbhndr.write_user_json(pm['did'],udatadic)
                     client.send_post(text=f"{postdata}", reply_to=reply_to(notification,None))
             if "ランク" in pm['content'] or "脳内" in pm['content']:
                 wctpl = word_count(pm['name'],pm['did'],client,WCOUNT,WMAX)
@@ -463,15 +505,16 @@ def fn_main():
      client = Client()
      login(client, initial_wait=1)
      seen_at = None
-     while True:
-      try:
-         seen_at = read_notifications_and_reply(client, seen_at)
-      except Exception as e:
-         print(f"exception line261 {e}")
-         login(client, initial_wait=60)
-      finally:
+#     while True:
+     try:
+        seen_at = read_notifications_and_reply(client, seen_at)
+     except Exception as e:
+        ex, val, tb = sys.exc_info()
+        traceback.print_exception(ex, val, tb)
+     finally:
+        pass
 #         print('ok')
-         time.sleep(5)
+#         time.sleep(60)
      return 'OK'
 
 if os.name == 'nt':

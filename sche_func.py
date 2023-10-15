@@ -1,7 +1,7 @@
+import pyt
 import traceback
 import time
 import json
-import pprint
 import datetime
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
@@ -83,7 +83,8 @@ def calculate_peryear(item, current_time):
     return next_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
 
 def calculate_nextday(item, current_time):
-    next_date = current_time + timedelta(days=1)
+    reg_date = datetime.datetime.strptime(item["regdate"], '%Y-%m-%d %H:%M:%S')
+    next_date = reg_date + timedelta(days=1)
     alarm_time = datetime.datetime.strptime(item["date"].split(' ')[-1], '%H:%M:%S')
     return next_date.replace(hour=alarm_time.hour, minute=alarm_time.minute, second=alarm_time.second,microsecond=0)
 
@@ -105,7 +106,6 @@ def calculate_nextmonth(item, current_time):
         if windex == -1:
             windex = 0
         alarm_date=get_nth_weekday_of_month(alarm_date,nsyuu,windex)
-        print(alarm_date)
         return alarm_date
     else:
         reg_date = datetime.datetime.strptime(item["regdate"], '%Y-%m-%d %H:%M:%S')
@@ -143,7 +143,7 @@ def get_next_alarm_time(item, current_time):
     return switch.get(period, lambda item, current_time: None)(item, current_time)
 
 def get_schedule_status_from_dict(data):
-    current_time = datetime.datetime.now()
+    current_time = pyt.datetimenow()
     expired_alarms = []
     upcoming_alarms = []
 
@@ -160,8 +160,23 @@ def get_schedule_status_from_dict(data):
 
     return expired_alarms, upcoming_alarms
 
+def get_schedule_status_from_item(item):
+    current_time = pyt.datetimenow()
+    expired_alarms = []
+    upcoming_alarms = []
+
+    next_alarm_time = get_next_alarm_time(item, current_time)
+    if next_alarm_time is None:
+        return None
+    if next_alarm_time < current_time:
+        item['nextalm'] = str(next_alarm_time)
+        expired_alarms.append([item, next_alarm_time])
+    else:
+        item['nextalm'] = str(next_alarm_time)
+        upcoming_alarms.append([item, next_alarm_time])
+    return [expired_alarms, upcoming_alarms]
+
 def display_alarms(expired, upcoming):
-    print("=== Expired Alarms ===")
     for item, alarm_time in expired:
         print(f"Expired alarm for schedule '{item['message']}'")
 
@@ -262,7 +277,6 @@ def unpack_datetime(dt):
     return year, month, day, hour, minute, second
 
 def ymdtodatetime(value,current_datetime):
-    print(f"Value={value}")
     # 数値を文字列に変換
     value_str = str(value)
     
@@ -275,7 +289,6 @@ def ymdtodatetime(value,current_datetime):
     second = 0
     
     length = len(value_str)
-    print(length)
     if length >= 14:
         year = int(value_str[:4])
         month = int(value_str[4:6])
@@ -348,7 +361,6 @@ def ymdtodatetime(value,current_datetime):
         date_time = current_datetime.replace(year=year, month=month, day=day, hour=hour, minute=minute, second=second)
     else:
         date_time = datetime.datetime(year, month, day, hour, minute, second)
-    print(date_time)
     return date_time
 
 def datesequencefunc(sequence:list,now:datetime) -> dict:
@@ -369,13 +381,10 @@ def datesequencefunc(sequence:list,now:datetime) -> dict:
 
     delta=relativedelta()
     for seq in sequence:
-        print(seq)
         match seq[1]:
             case "YMD":
                 ymdtime = ymdtodatetime(seq[0],now)
-                print("yyyy")
                 year,month,day,hour,minute,sec = unpack_datetime(ymdtime)
-                print("yyy")
             case "インプット":
                 input = seq[0]
             case "メモ":
@@ -562,6 +571,7 @@ def fix_datestring(input_str:str) -> str:
     input_str = re.sub('([日朝分半夜時年]+)([のには]+)','\\1 \\2 ',input_str)
     input_str = input_str.replace("朝","朝 ")
     input_str = input_str.replace("来週","来週 ")
+    input_str = input_str.replace("今日","今日 ")
     input_str = input_str.replace("明日","明日 ")
     input_str = input_str.replace("明後日","明後日 ")
     input_str = input_str.replace("今月","今月 ")
@@ -576,14 +586,13 @@ def fix_datestring2(input_str:str) -> str:
     re.find(input_str,"[1234567890]時.")
 
 def str_to_datetime(input_str: str) -> json:
-    print(input_str)
     save_input = input_str
     bunkatsu = input_str.split("\n")
     input_str=bunkatsu[0]
     memo = "\n".join(bunkatsu[1:])
 #    if memo == "":
 #        memo = "アラーム"
-    now = datetime.datetime.now()
+    now = pyt.datetimenow()
     now = now.replace(second=0,microsecond=0)
     day = now.date
     input_str =input_str.translate(str.maketrans({chr(0xFF01 + i): chr(0x21 + i) for i in range(94)}))
@@ -602,7 +611,6 @@ def str_to_datetime(input_str: str) -> json:
 
 def d2d(in1:str,in2:datetime,hantei:bool=True) -> json:
     dtdt = str_to_datetime(in1)
-    pprint.pprint(dtdt)
     ret = dtdt['date'] == str(in2)
     if ret != hantei:
        print(f"input:{in1}\nin: {dtdt['date']} out: {str(in2)}")
@@ -669,14 +677,12 @@ def test_str_to_datetime(username):
 #    js.append(d2d("来年 12/5 鵜川誕生日",datetime.datetime(2024,12,5,0,0,0,0)))
 #    js.append(d2d("毎年 12/5 ",datetime.datetime(1,12,5,0,0,0,0)))
 #    js.append(d2d("2023/10/01 10:00:00過去の時間",datetime.datetime(1,12,5,0,0,0,0)))
-    expired,upcomming = get_schedule_status_from_dict(jsbase)
-    expired = sorted(expired,key=lambda x: x[0]['nextalm'])
-    upcomming = sorted(upcomming,key=lambda x: x[0]['nextalm'])
-    pprint.pprint(expired)
-    pprint.pprint(upcomming)
-    for itm in expired:
-        print("EXPIRED:"+itm[0]['inputstr'].replace("\n"," ") + "->" + itm[0]['nextalm'])
-    for itm in upcomming:
-        print("NEXT:"+itm[0]['inputstr'].replace("\n","_")+"===>"+itm[0]['message'].replace("\n","_")+ "->" + itm[0]['nextalm'])
+#    expired,upcomming = get_schedule_status_from_dict(jsbase)
+#    expired = sorted(expired,key=lambda x: x[0]['nextalm'])
+#    upcomming = sorted(upcomming,key=lambda x: x[0]['nextalm'])
+#    for itm in expired:
+#        print("EXPIRED:"+itm[0]['inputstr'].replace("\n"," ") + "->" + itm[0]['nextalm'])
+#    for itm in upcomming:
+#        print("NEXT:"+itm[0]['inputstr'].replace("\n","_")+"===>"+itm[0]['message'].replace("\n","_")+ "->" + itm[0]['nextalm'])
 
-print(test_str_to_datetime("ukawa.bsky.social"))
+#test_str_to_datetime("ukawa.bsky.social")
